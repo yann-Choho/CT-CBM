@@ -133,14 +133,14 @@ def prepare_data_from_csv(annotation, config, return_test = False):
         
         
         # 1) Charger utilitaire de nettoyage
-        from concepts_bank_utils import clean_concept_name
+        # from concepts_bank_utils import clean_concept_name
         
         # 2) Charger le CSV ‘our_annotation’
         path_csv = f"{config.SAVE_PATH_CONCEPTS}/df_with_topics_v4.csv"
         df_aug_train_1 = pd.read_csv(path_csv)
         
         # 3) Nettoyer les noms de colonnes (concepts)
-        df_aug_train_1.rename(columns=lambda x: clean_concept_name(x), inplace=True)
+        # df_aug_train_1.rename(columns=lambda x: clean_concept_name(x), inplace=True)
         
         # df_aug_train_final.drop(columns = )
         for df in [df_aug_train, df_aug_train_1]:
@@ -155,12 +155,46 @@ def prepare_data_from_csv(annotation, config, return_test = False):
         
         # Reconvertir la colonne 'label' en int
         df_aug_train_final['label'] = df_aug_train_final['label'].astype(int)
+
+        from copy import copy
+        df_aug_train = df_aug_train_final.copy()
+
+        # TEST FOR Combined_annotation
+       # TEST FOR C3M
+        df_aug_test = pd.read_csv(f"{config.SAVE_PATH_CONCEPTS}/df_with_topics_v4_test_C3M.csv")
         
-        df_aug_train = df_aug_train_final
+        df_aug_test['text'] = df_aug_test['text'].astype(str).str.strip()
+        if(df_aug_test['label'].dtype != int):
+            df_aug_test['label'] = df_aug_test["label"].astype(str).str.strip()
+                
+        if(df_aug_test['label'].dtype != int):
+            df_aug_test = df_aug_test[df_aug_test["label"].isin(caption_to_number.keys())]
+            df_aug_test["label"] = df_aug_test["label"].map(caption_to_number)
+                
+        # clean column names
+        df_aug_test.columns = ["dummy_"+col.replace("\n", "").strip() if col in columns_C3M else col.replace("\n", "").strip() for col in df_aug_test]
+        
+        # clean types to int for "missing values"
+        for col in [col for col in df_aug_test.columns if (df_aug_test[col].dtype == 'O') and (col !='text') and (col!='label')]:
+            df_aug_test[col] = df_aug_test[col].apply(lambda x: int(x) if str(x).isdigit() else 0)
+
+        df_aug_test_1 = pd.read_csv(f"{config.SAVE_PATH_CONCEPTS}/df_with_topics_v4_test.csv")
+        df_aug_test_1['text'] = df_aug_test_1['text'].astype(str).str.strip()
+        
+        # 3) Nettoyer les noms de colonnes (concepts)
+        # df_aug_test_1.rename(columns=lambda x: clean_concept_name(x), inplace=True)
+        
+        # Merge des DataFrames
+        df_aug_test_final = df_aug_test.merge(df_aug_test_1, on=['text', 'label'])
+
+        # Reconvertir la colonne 'label' en int
+        df_aug_test_final['label'] = df_aug_test_final['label'].astype(int)
+        df_aug_test = df_aug_test_final.copy()
+
     else:
         raise ValueError("Entrez un type d’annotation valide parmi ['C3M','our_annotation']")
 
-    if (annotation == 'C3M' or annotation == 'our_annotation') and return_test == True :
+    if annotation in ['C3M','our_annotation','combined_annotation'] and return_test == True :
         return df_aug_train, df_aug_test
     else:
         return df_aug_train
