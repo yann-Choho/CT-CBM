@@ -40,7 +40,7 @@ def load_model_and_tokenizer(config, n_concepts = 4):
         tokenizer = GPT2Tokenizer.from_pretrained(config.model_name)
         tokenizer.pad_token = tokenizer.eos_token
     # elif config.model_name == 'gemma':
-    #     hf_token = "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" 
+    #     hf_token = "xxxx" 
     #     tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b-it", use_auth_token=hf_token)
     #     model = AutoModelForCausalLM.from_pretrained(
     #         "google/gemma-2-2b-it",
@@ -50,7 +50,7 @@ def load_model_and_tokenizer(config, n_concepts = 4):
     #     )
     #     model = model.base_model
     elif config.model_name == 'gemma':
-        hf_token = "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" 
+        hf_token = "xxxx" 
         tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-2b-it", use_auth_token=hf_token)
         model = AutoModelForCausalLM.from_pretrained(
             "google/gemma-2-2b-it",
