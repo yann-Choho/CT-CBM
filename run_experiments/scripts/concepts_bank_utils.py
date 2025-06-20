@@ -14,7 +14,7 @@ import json
 from hdbscan import flat
 import torch
 import hdbscan
-import umap
+import umap 
 import matplotlib.pyplot as plt
 from sentence_transformers import SentenceTransformer
 import numpy as np 
@@ -468,9 +468,6 @@ class CustomDataset(Dataset2):
         
         # Filtre pour obtenir toutes les colonnes "dummy_"
         self.additional_columns = [col for col in dataframe.columns if col.startswith("dummy_")]
-        
-        # Supprimer le préfixe 'dummy_' pour utiliser comme clés du dictionnaire
-        # self.additional_features_keys = [col.replace("dummy_", "") for col in self.additional_columns]
         self.additional_features_keys = [clean_concept_name(col) for col in self.additional_columns]
 
     def __len__(self):
@@ -480,7 +477,7 @@ class CustomDataset(Dataset2):
         text = self.texts[idx]
         label = self.labels[idx]
 
-        # Création du dictionnaire des additional features
+        # Création du dictionnaire des additional features (les concepts)
         additional_features = {
             key: torch.tensor(self.dataframe.iloc[idx][dummy_col], dtype=torch.long)
             for key, dummy_col in zip(self.additional_features_keys, self.additional_columns)

@@ -23,6 +23,11 @@ from attribution_utils import (
 )
 import json
 
+from models.utils import load_model_and_tokenizer
+from models.jointCBMv2 import JointModel
+from models.utils import RidgeLinearLayer
+
+
 # Ranking concepts 
 from ranking_utils import rank_macro_concepts, most_k_important_macro_concepts, get_concept_at_rank, randomize_scores
 
@@ -69,6 +74,7 @@ class JointResidualFittingModel(nn.Module):
         self.importance_per_iteration = []
         self.importance_per_iteration_2 = []
 
+    
     # OK
     def forward(self, input_ids, attention_mask):
         return self.joint_model.forward_residual(input_ids, attention_mask)
@@ -243,14 +249,29 @@ class JointResidualFittingModel(nn.Module):
             else:
                 print("Entrer un cavs_type_arg valide svp")
                 pass
-        elif strategy == 'new_heuristique' or 'new_heuristique_LIG' :
+        elif strategy == 'new_heuristique' or strategy == 'new_heuristique_LIG' :
             if cavs_type_arg == 'svm' or cavs_type_arg == 'mean':
                 with open(f"{self.config.SAVE_PATH}/blue_checkpoints/{self.config.model_name}/cavs/{cavs_type_arg}/sorted_macro_concepts_coverage_{self.config.annotation}_{self.config.agg_mode}_{self.config.agg_scope}.json", 'r') as f:
                     self.sorted_macro_concepts = json.load(f)
-        elif strategy == 'new_heuristique_MJ':
+        elif strategy in ['new_heuristique_MJ', 'new_heuristique_MJ_our_annotation', 'new_heuristique_MJ_combined_annotation']:
+            # self.config.annotation must correspond otherwise it will give error
             import pickle
             if cavs_type_arg == 'svm' or cavs_type_arg == 'mean':
                 with open(f"{self.config.SAVE_PATH}/blue_checkpoints/{self.config.model_name}/cavs/{cavs_type_arg}/sorted_macro_concepts_coverage_MJ_{self.config.annotation}_{self.config.agg_mode}_{self.config.agg_scope}.pkl", 'rb') as f:
+                    self.sorted_macro_concepts = pickle.load(f)
+                    print(strategy)
+                    print(self.sorted_macro_concepts)
+        elif strategy == 'new_heuristique_MJ_by_lig_brute':
+            import pickle
+            if cavs_type_arg == 'svm' or cavs_type_arg == 'mean':
+                with open(f"{self.config.SAVE_PATH}/blue_checkpoints/{self.config.model_name}/cavs/{cavs_type_arg}/sorted_macro_concepts_coverage_MJ_{self.config.annotation}_{self.config.agg_mode}_{self.config.agg_scope}_by_lig_brute.pkl", 'rb') as f:
+                    self.sorted_macro_concepts = pickle.load(f)
+                    print(strategy)
+                    print(self.sorted_macro_concepts)
+        elif strategy == 'new_heuristique_MJ_TCAVS':
+            import pickle
+            if cavs_type_arg == 'svm' or cavs_type_arg == 'mean':
+                with open(f"{self.config.SAVE_PATH}/blue_checkpoints/{self.config.model_name}/cavs/{cavs_type_arg}/sorted_macro_concepts_coverage_MJ_{self.config.annotation}_{self.config.agg_mode}_{self.config.agg_scope}_TCAVS.pkl", 'rb') as f:
                     self.sorted_macro_concepts = pickle.load(f)
                     print(strategy)
                     print(self.sorted_macro_concepts)
@@ -271,7 +292,7 @@ class JointResidualFittingModel(nn.Module):
                     list_concept_first_run = []
                     found_first_coverage = False
 
-                    if strategy != 'new_heuristique_MJ':
+                    if strategy not in ['new_heuristique_MJ', 'new_heuristique_MJ_our_annotation', 'new_heuristique_MJ_combined_annotation', 'new_heuristique_MJ_by_lig_brute', 'new_heuristique_MJ_TCAVS']:
                         for c,v in self.sorted_macro_concepts.items():
                             if v < coverage_threshold :
                                 list_concept_first_run.append(c)
@@ -297,7 +318,7 @@ class JointResidualFittingModel(nn.Module):
                     # Assurer un nombre minimal de concepts (= 3 * num_labels)
                     min_concepts = 3 * self.config.num_labels
                     if len(list_concept_first_run) < min_concepts:
-                        if strategy != 'new_heuristique_MJ':
+                        if strategy not in ['new_heuristique_MJ', 'new_heuristique_MJ_our_annotation', 'new_heuristique_MJ_combined_annotation', 'new_heuristique_MJ_by_lig_brute', 'new_heuristique_MJ_TCAVS']:
                             for c in self.sorted_macro_concepts:
                                 if c not in list_concept_first_run:
                                     list_concept_first_run.append(c)
@@ -400,7 +421,7 @@ class JointResidualFittingModel(nn.Module):
                     print("perfomance with residual (ON TEST) : accuracy at", self.joint_model_with_r_test_metrics[iteration-1][1])
                     print("perfomance without residual (ON TEST) : accuracy at", self.joint_model_test_metrics[iteration-1]['task_global_accuracy'])
 
-                    with open(f"{self.config.SAVE_PATH}blue_checkpoints/{self.config.model_name}/Our_CBM_joint/{self.model_name}_performance_{strategy}.json", 'w') as f:
+                    with open(f"{self.config.SAVE_PATH}blue_checkpoints/{self.config.model_name}/Our_CBM_joint/{self.model_name}_performance_{strategy}_MJ.json", 'w') as f:
                         json.dump({
                             "concepts_discovered_by_iteration": self.concepts_discovered_by_iteration,
                             "train_metrics": self.joint_model_train_metrics,
@@ -416,8 +437,8 @@ class JointResidualFittingModel(nn.Module):
                     break
                 else:
                     # CHOOSE THE SECOND BATCH OF CONCEPT TO ADD
-                    if strategy != 'new_heuristique_MJ':
-                        nb_new_concepts = 1  # Par exemple, à adapter selon tes besoins
+                    if strategy not in ['new_heuristique_MJ', 'new_heuristique_MJ_our_annotation', 'new_heuristique_MJ_combined_annotation', 'new_heuristique_MJ_by_lig_brute', 'new_heuristique_MJ_TCAVS']:
+                        nb_new_concepts = 1  # to adapt if needed
                         new_concepts = []
                 
                         for c, _ in self.sorted_macro_concepts.items():
@@ -430,8 +451,7 @@ class JointResidualFittingModel(nn.Module):
                         self.joint_model.concepts_name.extend(new_concepts)
                         
                     else:
-                        # 1 1 1 1 Strategy 
-                        nb_new_concepts = 1  # Par exemple, à adapter selon tes besoins
+                        nb_new_concepts = 1  # à adapter selon les besoins
                         new_concepts = []
             
                         path_combined_score_LIG = (f"{self.config.SAVE_PATH}/blue_checkpoints/{self.config.model_name}/cavs"

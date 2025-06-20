@@ -1,3 +1,5 @@
+numpy==1.26.4
+accelerate==1.8.0
 sentence-transformers
 hdbscan
 umap-learn

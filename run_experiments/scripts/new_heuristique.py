@@ -22,161 +22,51 @@ def cos_sim_cubed(cbl_features, target):
     sim = torch.sum(cbl_features*target, dim=-1)
     return sim.mean()
     
-# def compute_cosine_matrix_and_metrics(df, text_column, embedder_model, embedder_tokenizer, cavs, 
-#                                         threshold=0.35, f1_cutoff=None, device=torch.device("cuda"),
-#                                         save_dir=None, config = None):
-#     """
-#     Pour chaque texte dans df[text_column], calcule l'embedding CLS via embedder_model
-#     et détermine la similarité cosinus entre cet embedding et chacun des vecteurs CAV.
-    
-#     Le résultat est stocké dans un DataFrame (cosine_df) contenant les scores cosinus pour chaque concept,
-#     auquel sont ajoutées les colonnes "text" et "label" issues de df.
-    
-#     Ensuite, à partir d'un seuil (threshold), des prédictions sont définies (1 si score > threshold)
-#     et, en comparant aux colonnes de ground truth dans df, les métriques suivantes sont calculées pour chaque concept :
-#       - accuracy
-#       - positive_rate (taux de prédiction positive)
-#       - F1 score
-      
-#     Les colonnes ground truth dans df peuvent être soit nommées exactement comme le concept,
-#     soit préfixées par "dummy_".
-    
-#     Si save_dir est fourni, la fonction charge cosine_df depuis le fichier de sauvegarde s'il existe,
-#     sinon elle le calcule et le sauvegarde.
-    
-#     Args:
-#         df (pd.DataFrame): Doit contenir au moins la colonne text_column, "label", et pour chaque concept,
-#                            une colonne ground truth portant soit le nom exact du concept, soit "dummy_" + concept.
-#         text_column (str): Nom de la colonne contenant les textes.
-#         embedder_model (torch.nn.Module): Modèle d'embedder (ex. BERT).
-#         embedder_tokenizer: Tokenizer associé au modèle.
-#         cavs (dict): Dictionnaire des vecteurs CAV pour chaque concept.
-#         threshold (float): Seuil pour définir la prédiction (1 si score > threshold).
-#         f1_cutoff (float, optional): Seuil pour filtrer les concepts en fonction du F1 score.
-#         device (torch.device): Le device (ex: torch.device("cuda")).
-#         save_dir (str, optional): Répertoire pour sauvegarder cosine_df. S'il existe déjà, il sera chargé.
-        
-#     Returns:
-#         tuple: (cosine_df, metrics, filtered_concepts)
-#             - cosine_df : DataFrame avec les scores de similarité pour chaque concept, ainsi que "text" et "label".
-#             - metrics : dictionnaire avec les métriques (accuracy, positive_rate, F1, TP, FP, FN, TN) par concept.
-#             - filtered_concepts : liste des concepts filtrés en fonction du F1 score (si f1_cutoff est défini), sinon liste de tous les concepts.
-#     """
-#     import pickle, os, gc
 
-#     if save_dir:
-#         os.makedirs(save_dir, exist_ok=True)
-#         cosine_path = os.path.join(save_dir, "cosine_df.pkl")
-#     else:
-#         cosine_path = None
 
-#     # Charger cosine_df s'il existe déjà
-#     if cosine_path and os.path.exists(cosine_path):
-#         print("Chargement de cosine_df depuis", cosine_path)
-#         with open(cosine_path, "rb") as f:
-#             cosine_df = pickle.load(f)
-#     else:
-#         print("Calcul de cosine_df...")
-#         embedder_model.to(device)
-#         embedder_model.eval()
-#         cosine_scores = []
-#         index_list = []
-        
-#         # Itérer sur chaque texte
-#         for idx, row in df.iterrows():
-#             text = row[text_column]
-#             encoded_input = embedder_tokenizer(text, return_tensors='pt', truncation=True, padding=True)
-#             for key in encoded_input:
-#                 encoded_input[key] = encoded_input[key].to(device)
-#             with torch.no_grad():
-#                 output = embedder_model(**encoded_input)
-#                 # Utiliser pooler_output si disponible, sinon utiliser le token CLS de last_hidden_state
-#                 if config.use_cls_token == False and hasattr(output, "pooler_output") and output.pooler_output is not None:
-#                     cls_emb = output.pooler_output  # shape (1, dim)
-#                 else:
-#                     cls_emb = output.last_hidden_state[:, 0, :]  # shape (1, dim)
-            
-#             sample_scores = {}
-#             # Calculer la similarité cosinus pour chaque concept
-#             for concept, cav_vec in cavs.items():
-#                 if not isinstance(cav_vec, torch.Tensor):
-#                     cav_vec = torch.tensor(cav_vec, dtype=torch.float32)
-#                 cav_vec = cav_vec.to(device)
-#                 if cav_vec.dim() == 1:
-#                     cav_vec = cav_vec.unsqueeze(0)
-#                 sim = F.cosine_similarity(cav_vec, cls_emb, dim=1).item()
-#                 sample_scores[concept] = sim
-#             cosine_scores.append(sample_scores)
-#             index_list.append(idx)
-            
-#             del encoded_input, cls_emb, output
-#             torch.cuda.empty_cache()
-        
-#         cosine_df = pd.DataFrame(cosine_scores, index=index_list)
-
-#         # Ajouter les colonnes "text" et "label" provenant de df
-#         cosine_df = df[['text', 'label']].join(cosine_df)
-        
-#         if cosine_path:
-#             with open(cosine_path, "wb") as f:
-#                 pickle.dump(cosine_df, f)
-#             print("cosine_df sauvegardé à", cosine_path)
-    
-#     # Déterminer quelles colonnes correspondent aux concepts
-#     # On considère ici que les colonnes de cosine_df, hormis "text" et "label", correspondent aux concepts
-#     pred_columns = [col for col in cosine_df.columns if col not in ["text", "label"]]
-#     predictions = (cosine_df[pred_columns] > threshold).astype(int)
-    
-#     # Calcul des métriques pour chaque concept.
-#     # Pour chaque concept, on cherche dans le DataFrame d'origine la colonne ground truth.
-#     # On vérifie d'abord le nom exact, sinon "dummy_" + concept (après strip).
-#     metrics = {}
-#     n_samples = len(df)
-#     for concept in cavs.keys():
-#         # Rechercher la colonne dans df : soit exactement, soit avec "dummy_" préfixé
-#         if concept in df.columns:
-#             truth = df[concept]
-#         elif f"dummy_{concept}" in df.columns:
-#             truth = df[f"dummy_{concept}"]
-#         else:
-#             print(f"Attention : aucune colonne ground truth pour le concept '{concept}'. On utilise des zéros.")
-#             truth = pd.Series([0] * n_samples, index=df.index)
-        
-#         pred = predictions[concept]
-#         TP = ((pred == 1) & (truth == 1)).sum()
-#         FP = ((pred == 1) & (truth == 0)).sum()
-#         FN = ((pred == 0) & (truth == 1)).sum()
-#         TN = ((pred == 0) & (truth == 0)).sum()
-        
-#         accuracy = (TP + TN) / n_samples if n_samples > 0 else 0.0
-#         positive_rate = pred.mean()  # proportion de 1 dans la prédiction
-#         f1 = 2 * TP / (2 * TP + FP + FN) if (2 * TP + FP + FN) > 0 else 0.0
-        
-#         metrics[concept] = {
-#             "accuracy": accuracy,
-#             "positive_rate": positive_rate,
-#             "F1": f1,
-#             "TP": int(TP),
-#             "FP": int(FP),
-#             "FN": int(FN),
-#             "TN": int(TN)
-#         }
-    
-#     # Filtrer les concepts selon f1_cutoff, si fourni
-#     if f1_cutoff is not None:
-#         filtered_concepts = [concept for concept, m in metrics.items() if m["F1"] >= f1_cutoff]
-#     else:
-#         filtered_concepts = list(cavs.keys())
-
-#     # Appliquer le nettoyage sur la liste chargée
-#     filtered_concepts = [clean_concept_name(name)for name  in filtered_concepts] # expérimental
-    
-#     return cosine_df, metrics, filtered_concepts
 
 # version 2 : 70/30 train/val
 def compute_cosine_matrix_and_metrics(df, text_column, embedder_model, embedder_tokenizer, cavs, 
                                       f1_cutoff=None, device=torch.device("cuda"),
                                       save_dir=None, config=None, annotation = None, cos_cubed = False):
+    """
+    Pour chaque texte dans df[text_column], calcule l'embedding CLS via embedder_model
+    et détermine la similarité cosinus entre cet embedding et chacun des vecteurs CAV.
+    
+    Le résultat est stocké dans un DataFrame (cosine_df) contenant les scores cosinus pour chaque concept,
+    auquel sont ajoutées les colonnes "text" et "label" issues de df.
+    
+    Ensuite, à partir d'un seuil (threshold), des prédictions sont définies (1 si score > threshold)
+    et, en comparant aux colonnes de ground truth dans df, les métriques suivantes sont calculées pour chaque concept :
+      - accuracy
+      - positive_rate (taux de prédiction positive)
+      - F1 score
+      
+    Les colonnes ground truth dans df peuvent être soit nommées exactement comme le concept,
+    soit préfixées par "dummy_".
+    
+    Si save_dir est fourni, la fonction charge cosine_df depuis le fichier de sauvegarde s'il existe,
+    sinon elle le calcule et le sauvegarde.
+    
+    Args:
+        df (pd.DataFrame): Doit contenir au moins la colonne text_column, "label", et pour chaque concept,
+                           une colonne ground truth portant soit le nom exact du concept, soit "dummy_" + concept.
+        text_column (str): Nom de la colonne contenant les textes.
+        embedder_model (torch.nn.Module): Modèle d'embedder (ex. BERT).
+        embedder_tokenizer: Tokenizer associé au modèle.
+        cavs (dict): Dictionnaire des vecteurs CAV pour chaque concept.
+        threshold (float): Seuil pour définir la prédiction (1 si score > threshold).
+        f1_cutoff (float, optional): Seuil pour filtrer les concepts en fonction du F1 score.
+        device (torch.device): Le device (ex: torch.device("cuda")).
+        save_dir (str, optional): Répertoire pour sauvegarder cosine_df. S'il existe déjà, il sera chargé.
+        
+    Returns:
+        tuple: (cosine_df, metrics, filtered_concepts)
+            - cosine_df : DataFrame avec les scores de similarité pour chaque concept, ainsi que "text" et "label".
+            - metrics : dictionnaire avec les métriques (accuracy, positive_rate, F1, TP, FP, FN, TN) par concept.
+            - filtered_concepts : liste des concepts filtrés en fonction du F1 score (si f1_cutoff est défini), sinon liste de tous les concepts.
+    """
+    
     import pickle, os, gc
     from sklearn.model_selection import train_test_split
 
@@ -440,9 +330,10 @@ def clean_concept_name(name):
     Nettoie un nom de concept en supprimant le préfixe "cos_" ou "dummy_", en retirant les espaces superflus
     et en supprimant les phrases inutiles à partir de "Let me know...".
     """
+    import re
     name = name.replace("cos_", "").replace("dummy_", "").strip()
-    name = re.sub(r"Let me know.*", "", name) # Supprime les phrases inutiles
-    return " ".join(name.split()) # Réduit les espaces multiples
+    name = re.sub(r"Let me know.*", "", name)  # Supprime les phrases inutiles
+    return " ".join(name.split())  # Réduit les espaces multiples
 
 def rename_dataframe_columns(df):
     """
@@ -524,3 +415,64 @@ def order_well_detected_concepts(sorted_concepts, filtered_concepts):
     filtered_sorted = [ (name, score) for name, score in sorted_concepts if name in filtered_concepts ]
     
     return filtered_sorted
+
+
+#### VIZUALISATION ##############
+
+def plot_concept_threshold(cosine_df, groundtruth_df, concept, thresholds, gt_prefix="dummy_"):
+    """
+    Affiche un scatter plot pour un concept donné :
+      - L'axe des y représente les scores de similarité cosinus pour le concept (dans cosine_df).
+      - Les points sont colorés en fonction de la ground truth issue de groundtruth_df :
+          * Vert si la valeur de ground truth (colonne "dummy_<concept>" ou <concept>) vaut 1.
+          * Rouge sinon.
+      - Une ligne horizontale indique le seuil choisi.
+    
+    Args:
+        cosine_df (pd.DataFrame): DataFrame contenant les scores de similarité pour chaque concept,
+                                  avec une colonne 'text' et 'label' qui seront utilisées pour la jointure.
+        groundtruth_df (pd.DataFrame): DataFrame contenant la ground truth pour chaque concept,
+                                       avec les colonnes 'text' et 'label' pour faire la jointure.
+        concept (str): Nom nettoyé du concept (sans "cos_" ou "dummy_") pour lequel visualiser.
+        thresholds (dict): Dictionnaire contenant les seuils pour chaque concept, par exemple { 'concept1': 0.35, ... }.
+        gt_prefix (str): Préfixe attendu dans groundtruth_df pour les colonnes ground truth (par défaut "dummy_").
+    
+    Returns:
+        None. Affiche le graphique.
+    """
+    groundtruth_df.columns = ['dummy_' + col if col not in ['text', 'label'] else col for col in groundtruth_df.columns]
+
+    # Effectuer une jointure sur les colonnes 'text' et 'label'
+    merged_df = cosine_df.merge(groundtruth_df, on=['text', 'label'], how='inner')
+    # print(merged_df)
+    # Déterminer le nom de la colonne ground truth dans le DataFrame fusionné
+    gt_col = f"{gt_prefix}{concept}"
+    if gt_col not in merged_df.columns:
+        if concept in merged_df.columns:
+            gt_col = concept
+        else:
+            raise ValueError(f"Colonne ground truth pour le concept '{concept}' non trouvée dans le DataFrame fusionné.")
+    
+    # Vérifier que la colonne de similarité est présente
+    if concept not in merged_df.columns:
+        raise ValueError(f"Colonne de similarité pour le concept '{concept}' non trouvée dans le DataFrame fusionné.")
+    
+    # Récupérer les scores et la ground truth depuis le DataFrame fusionné
+    sims = merged_df[concept]
+    truth = merged_df[gt_col]
+    
+    # Définir la couleur : vert pour ground truth = 1, rouge pour ground truth = 0
+    colors = truth.map({1: "green", 0: "red"})
+    
+    plt.figure(figsize=(10, 6))
+    # Utiliser l'index (numéro d'échantillon) comme axe x et les scores de similarité comme axe y
+    plt.scatter(range(len(sims)), sims, c=colors, alpha=0.7, edgecolor='k', s=10)
+    # Ligne horizontale indiquant le seuil pour le concept
+    plt.axhline(y=thresholds[concept], color="blue", linestyle="--", 
+                label=f"Threshold = {thresholds[concept]}")
+    plt.xlabel("Échantillon")
+    plt.ylabel("Cosine Similarity")
+    plt.title(f"Cosine Similarity pour le concept '{concept}'")
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.show()
